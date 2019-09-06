@@ -10,7 +10,7 @@ const config = {
         connectionLimit: 100,
     },
     SUPER_PASSWORD: 'e10adc3949ba59abbe56e057f20f883e',
-    WORKSPACE: 'D:/sschen86/lazycat-vue/v2/', // 工作目录
+    WORKSPACE: 'c:/workspace/cubo/v1/', // 工作目录
     BASE_TEMPLATE_PATH: '/v1/', // 模板的默认起始路径
     BASE_STYLE_PATH: '//style.571xz.com/v1/', // 样式的默认起始路径
 

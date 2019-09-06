@@ -3,4 +3,9 @@ module.exports = {
   parserOptions: { parser: 'babel-eslint' },
   rules: {
   },
+  globals: { // TODO:修改为仅对tests目录生效
+    describe: true,
+    test: true,
+    expect: true
+  }
 }
