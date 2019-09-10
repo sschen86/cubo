@@ -32,56 +32,23 @@ function glass (Class) {
         },
 
         proxy () {
-            const caches = cache.normal()
+            const caches = cache()
+            return Class.__proxy__ = async function () {
+                const proxyId = [...arguments]
+                return caches(proxyId, {
+                    async value ({ value }) {
+                        if (!value) {
+                            return (new Class(...proxyId)).init()
+                        }
+                        return value.update ? value.update() : value.init()
+                    },
+                    async version () {
+                        return this.version ? this.version() : this.lastModified
+                    },
+                })
+            }
         },
     }
 }
 
 export default glass
-
-/*
-module.exports = glass
-
-const cache = require('./cache')
-
-function glass(glass) {
-
-    return {
-
-        static(interface) {
-            Object.assign(glass.__proxy__, interface)
-        },
-
-        versionProxy() {
-
-            let versionCache = cache.versionCache()
-
-            return glass.__proxy__ = async function () {
-
-                let proxyId = [...arguments]
-
-                return await versionCache(proxyId, {
-
-                    async create() {
-                        return await (new glass(...proxyId)).init()
-                    },
-
-                    async update() {
-                        return this.update ? await this.update() : await this.init()
-                    },
-
-                    async version() {
-                        return this.version ? await this.version() : this.lastModified
-                    },
-
-                })
-
-            }
-
-        },
-
-    }
-
-}
-
-*/

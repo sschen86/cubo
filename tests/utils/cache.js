@@ -2,106 +2,116 @@
 import cache from '../../server/utils/cache'
 
 export default function () {
-    describe('\n=== cache.readonly ===', () => {
-        const caches = cache.readonly()
+    describe('\n=== cache ===', () => {
+        test('纯静态缓存读取', async () => {
+            const caches = cache()
+            const getValue = async () => caches('key', () => Math.random())
 
-        test('缓存赋值', async () => {
-            caches('k1', async () => {
-                return 'k1666'
-            })
-
-            expect(await caches('k1')).toBe('k1666')
-            expect(await caches('k1')).toBe('k1666')
+            expect(await getValue()).toBe(await getValue())
+            expect(await getValue()).toBe(await getValue())
         })
 
-        test('缓存只读', async () => {
-            caches('k1', async () => {
-                return 'k1777'
-            })
+        test('缓存时间过期失效', async () => {
+            const caches = cache({ maxAge: 100 })
+            const getValue = async () => caches('key', () => Math.random())
+            const oldValue = await getValue()
+            expect(await getValue()).toBe(oldValue)
 
-            expect(await caches('k1')).toBe('k1666')
+            setTimeout(async () => {
+                expect(await getValue()).toBe(oldValue)
+            }, 10)
+
+            setTimeout(async () => {
+                expect(await getValue()).toBe(oldValue)
+            }, 10 + 92)
+
+            setTimeout(async () => {
+                expect(await getValue()).not.toBe(oldValue)
+            }, 10 + 92 + 120)
         })
 
-        test('缓存异步读取', async () => {
-            const asyncValue = await caches('asyncValue', async () => {
-                return new Promise((resolve) => {
-                    setTimeout(() => {
-                        resolve('asyncValue1')
-                    }, 200)
-                })
+        test('缓存版本过期失效', async () => {
+            const caches = cache()
+            const getValue = async () => caches('key', {
+                value: () => Math.random(),
+                version: () => version,
             })
 
-            expect(asyncValue).toBe('asyncValue1')
-        })
-    })
+            let version = 0
+            const oldValue = await getValue()
 
-    describe('\n=== cache.normal ===', () => {
-        const caches = cache.normal()
+            expect(await getValue()).toBe(oldValue)
+            expect(await getValue()).toBe(oldValue)
 
-        test('缓存赋值', async () => {
-            const version = 1
-
-            const value1 = await caches('key', {
-                value: async () => 'hello cubo',
-                version: async () => version,
-            })
-
-            expect(value1).toBe('hello cubo')
-
-            const value2 = await caches('key', {
-                value: async () => 'hello cubo2',
-                version: async () => version,
-            })
-
-            expect(value2).toBe('hello cubo')
-        })
-
-        test('缓存条件变更', async () => {
-            let version = 2
-            const value = 'A'
-            const value1 = await caches('key', {
-                value: async () => value,
-                version: async () => version,
-            })
-
-            expect(value1).toBe('A')
-
-            const value2 = await caches('key', {
-                value: async () => 'B',
-                version: async () => version,
-            })
-
-            expect(value2).toBe('A')
-
-            version = 3
-            expect(await caches('key')).toBe('B')
+            version = 1
+            const newValue = await getValue()
+            expect(newValue).not.toBe(oldValue)
+            expect(await getValue()).toBe(newValue)
         })
 
         test('缓存异步读取', async () => {
-            const asyncValue = await caches('asyncValue', async () => {
-                return new Promise((resolve) => {
+            const caches = cache()
+            let value = 1
+            const getValue = async () => caches('key', async () => {
+                return new Promise(resolve => {
                     setTimeout(() => {
-                        resolve('asyncValue1')
-                    }, 200)
+                        resolve(value)
+                    }, 1000)
                 })
-            }, () => true)
+            })
+            const value1 = await getValue()
+            value = 2
+            const value2 = await getValue()
 
-            expect(asyncValue).toBe('asyncValue1')
+            expect(value1).toBe(1)
+            expect(value2).toBe(1)
         })
-    })
 
-    describe('\n=== cache.pool ===', () => {
-        const caches = cache.pool()
+        test('缓存池使用', async () => {
+            const caches = cache({ poolSize: true })
+            const [code1, code2, code3] = ['?name=张三', '?name=李四', '?name=王五']
+            const getValue = async (code) => caches('key', {
+                code,
+                async value () {
+                    return new Promise(resolve => {
+                        setTimeout(() => {
+                            resolve(code)
+                        }, 100)
+                    })
+                },
+            })
 
-        test('缓存赋值', async () => {
-            const value1 = await caches('key', '#1', () => '##1')
-            const value2 = await caches('key', '#2', () => '##2')
+            const value1 = await getValue(code1)
+            const value2 = await getValue(code2)
+            const value3 = await getValue(code3)
 
-            expect(value1).toBe('##1')
-            expect(value2).toBe('##2')
+            expect(value1).not.toBe(value2)
+            expect(await getValue(code1)).toBe(value1)
+            expect(await getValue(code2)).toBe(value2)
+            expect(await getValue(code3)).toBe(value3)
+        })
 
-            expect(await caches('key', '#1')).toBe('##1')
-            expect(await caches('key', '#2')).toBe('##2')
+        test('缓存池清理', async () => {
+            const caches = cache({ poolSize: 2 })
+            const [code1, code2, code3] = ['张三', '李四', '王五']
+
+            const getValue = async (code) => caches('key', {
+                code,
+                value: async () => code + Math.random(),
+            })
+
+            const value1 = await getValue(code1)
+            const value2 = await getValue(code2)
+            const value3 = await getValue(code3)
+
+            expect(await getValue(code3)).toBe(value3)
+            expect(await getValue(code2)).toBe(value2)
+            expect(await getValue(code1)).not.toBe(value1) // value1原值已被回收，新的值是后续生成的
+
+            setTimeout(async () => {
+                expect(await getValue(code2)).toBe(value2)
+                expect(await getValue(code3)).not.toBe(value3) // value3在读取code2的时候被回收了
+            }, 2000)
         })
     })
 }
